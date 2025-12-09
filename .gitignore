@@ -70,3 +70,7 @@ local.properties
 # virtual machine crash logs
 hs_err_pid*
 replay_pid*
+
+# Markdown files (except README.md)
+*.md
+!README.md
