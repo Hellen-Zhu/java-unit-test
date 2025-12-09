@@ -1,0 +1,202 @@
+plugins {
+    id 'java'
+    id 'jacoco'
+}
+
+group = 'com.example'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+repositories {
+    // 使用阿里云镜像
+    maven {
+        url 'https://maven.aliyun.com/repository/central'
+        allowInsecureProtocol = true
+    }
+    maven {
+        url 'https://maven.aliyun.com/repository/public'
+        allowInsecureProtocol = true
+    }
+    maven {
+        url 'https://maven.aliyun.com/repository/gradle-plugin'
+        allowInsecureProtocol = true
+    }
+    // 华为云镜像作为备选
+    maven {
+        url 'https://repo.huaweicloud.com/repository/maven/'
+        allowInsecureProtocol = true
+    }
+    // 中央仓库
+    mavenCentral()
+    google()
+}
+
+dependencies {
+    // JUnit 5 - 使用具体的模块
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.9.2'
+
+    // JUnit Platform - 用于并行执行配置
+    testImplementation 'org.junit.platform:junit-platform-engine:1.9.2'
+
+    // Mockito
+    testImplementation 'org.mockito:mockito-core:5.1.1'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.1.1'
+
+    // AssertJ (可选)
+    testImplementation 'org.assertj:assertj-core:3.24.2'
+}
+
+test {
+    useJUnitPlatform()
+
+    // 启用 JaCoCo
+    finalizedBy jacocoTestReport
+
+    // JUnit 5 并行执行配置（通过系统属性）
+    systemProperties = [
+        'junit.jupiter.execution.parallel.enabled': 'true',
+        'junit.jupiter.execution.parallel.mode.default': 'concurrent',
+        'junit.jupiter.execution.parallel.mode.classes.default': 'concurrent',
+        'junit.jupiter.execution.parallel.config.strategy': 'dynamic',
+        'junit.jupiter.execution.parallel.config.dynamic.factor': '1'
+    ]
+
+    // 设置最大并行进程数（Gradle级别）
+    maxParallelForks = Runtime.runtime.availableProcessors()
+
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+        showStandardStreams = true  // 显示测试输出
+        showCauses = true
+        showExceptions = true
+        showStackTraces = true
+    }
+}
+
+// JaCoCo 版本配置
+jacoco {
+    toolVersion = "0.8.7"  // 使用更稳定的旧版本
+}
+
+// JaCoCo 测试报告配置
+jacocoTestReport {
+    dependsOn test  // 确保先运行测试
+
+    reports {
+        xml.required = true
+        csv.required = false
+        html.required = true
+        html.outputLocation = layout.buildDirectory.dir('reports/jacoco/html')
+    }
+
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                // 排除不需要覆盖的类
+                '**/model/**',
+                '**/exception/**',
+                '**/Application*'
+            ])
+        }))
+    }
+}
+
+// JaCoCo 覆盖率检查
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                minimum = 0.60  // 最低60%覆盖率
+            }
+        }
+
+        rule {
+            enabled = true
+            element = 'CLASS'
+            includes = ['com.example.service.*']
+
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.70  // Service层至少70%行覆盖率
+            }
+        }
+    }
+}
+
+// 自定义任务：运行测试并生成报告
+task testWithCoverage {
+    dependsOn test, jacocoTestReport
+    description = "Run tests and generate JaCoCo coverage report"
+    group = "verification"
+
+    doLast {
+        println "\n========================================"
+        println "测试执行完成！"
+        println "覆盖率报告位置："
+        println "HTML: build/reports/jacoco/html/index.html"
+        println "XML:  build/reports/jacoco/test/jacocoTestReport.xml"
+        println "========================================"
+    }
+}
+
+// 自定义任务：检查覆盖率
+task checkCoverage {
+    dependsOn jacocoTestCoverageVerification
+    description = "Check if code coverage meets requirements"
+    group = "verification"
+}
+
+// 显示覆盖率统计
+task showCoverageStats {
+    dependsOn jacocoTestReport
+    doLast {
+        def report = file("${buildDir}/reports/jacoco/test/jacocoTestReport.xml")
+        if (report.exists()) {
+            println "\n===== 代码覆盖率统计 ====="
+            println "覆盖率报告已生成："
+            println "HTML: build/reports/jacoco/html/index.html"
+            println "XML:  build/reports/jacoco/test/jacocoTestReport.xml"
+            println ""
+            println "使用以下命令查看详细统计："
+            println "python3 coverage-summary.py"
+            println "========================="
+        } else {
+            println "覆盖率报告未生成，请先运行: gradle test"
+        }
+    }
+}
+
+// 特定测试任务
+task testCalculator(type: Test) {
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching '*CalculatorTest'
+    }
+    finalizedBy jacocoTestReport
+}
+
+task testUserService(type: Test) {
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching '*UserServiceTest'
+    }
+    finalizedBy jacocoTestReport
+}
+
+// 编码设置
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+// 清理任务
+clean {
+    delete 'build/reports/jacoco'
+}
